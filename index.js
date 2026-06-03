@@ -128,6 +128,20 @@ function getTimezoneOffset(timezone = 'UTC') {
   }
 }
 
+const SUPPORTED_CURRENCIES = ['CNY', 'USD', 'HKD', 'EUR', 'JPY'];
+
+function normalizeSubscriptionAmount(value) {
+  const amount = Number(value);
+  if (isNaN(amount) || amount < 0) {
+    return 0;
+  }
+  return Math.round(amount * 100) / 100;
+}
+
+function normalizeSubscriptionCurrency(currency) {
+  return SUPPORTED_CURRENCIES.includes(currency) ? currency : 'CNY';
+}
+
 // 格式化时区显示，包含UTC偏移
 function formatTimezoneDisplay(timezone = 'UTC') {
   try {
@@ -554,6 +568,27 @@ const adminPage = `
     .readonly-input { background-color: #f8fafc; border-color: #e2e8f0; cursor: not-allowed; }
     .error-message { font-size: 0.875rem; margin-top: 0.25rem; display: none; }
     .error-message.show { display: block; }
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    input[type="email"],
+    select {
+      min-height: 42px;
+      height: 42px;
+      line-height: 1.25;
+    }
+    select {
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 1rem 1rem;
+      padding-right: 2.5rem !important;
+    }
+    select::-ms-expand {
+      display: none;
+    }
 
     /* 通用悬浮提示优化 */
     .hover-container {
@@ -772,6 +807,35 @@ const adminPage = `
       margin-right: 6px;
     }
 
+    .stats-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+    .stats-tab.active {
+      background: #4f46e5;
+      color: #ffffff;
+      border-color: #4f46e5;
+    }
+    .stats-tab {
+      border: 1px solid #d1d5db;
+      color: #374151;
+      background: #ffffff;
+    }
+    .stats-nav-btn {
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .currency-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      line-height: 1.6;
+    }
+
     /* 表格布局优化 */
     .table-container {
       width: 100%;
@@ -901,6 +965,47 @@ const adminPage = `
       </div>
     </div>
     
+    <div id="costStatsPanel" class="stats-card mb-6 p-4">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+        <div>
+          <h3 class="text-lg font-semibold text-gray-800"><i class="fas fa-chart-pie text-indigo-600 mr-2"></i>费用统计</h3>
+          <p id="statsRangeLabel" class="text-sm text-gray-500 mt-1">正在计算...</p>
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div class="inline-flex rounded-md shadow-sm" role="group" aria-label="统计周期">
+            <button type="button" class="stats-tab px-3 py-2 text-sm rounded-l-md active" data-period="week">周</button>
+            <button type="button" class="stats-tab px-3 py-2 text-sm border-l-0" data-period="month">月</button>
+            <button type="button" class="stats-tab px-3 py-2 text-sm rounded-r-md border-l-0" data-period="year">年</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" id="statsPrevBtn" class="stats-nav-btn border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50" title="上一周期">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <button type="button" id="statsTodayBtn" class="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50">当前</button>
+            <button type="button" id="statsNextBtn" class="stats-nav-btn border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50" title="下一周期">
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+          <div class="text-sm font-medium text-gray-500 mb-2">预计扣费</div>
+          <div id="chargeTotals" class="text-sm text-gray-800 space-y-1">暂无费用</div>
+        </div>
+        <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+          <div class="text-sm font-medium text-gray-500 mb-2">周期折算</div>
+          <div id="normalizedTotals" class="text-sm text-gray-800 space-y-1">暂无费用</div>
+        </div>
+      </div>
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 text-sm font-medium text-gray-700">预计扣费明细</div>
+        <div id="chargeDetails" class="divide-y divide-gray-100 text-sm text-gray-700">
+          <div class="px-4 py-3 text-gray-500">暂无扣费</div>
+        </div>
+      </div>
+    </div>
+
     <div class="table-container bg-white rounded-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full divide-y divide-gray-200 responsive-table">
@@ -1197,6 +1302,30 @@ const adminPage = `
           </div>
         </div>
         
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">订阅金额</label>
+            <input type="number" id="amount" min="0" step="0.01" value="0"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+            <p class="text-xs text-gray-500 mt-1">金额复用上方订阅周期，例如 30 / 1 月</p>
+            <div class="error-message text-red-500"></div>
+          </div>
+
+          <div>
+            <label for="currency" class="block text-sm font-medium text-gray-700 mb-1">币种</label>
+            <select id="currency"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 bg-white">
+              <option value="CNY" selected>CNY 人民币</option>
+              <option value="USD">USD 美元</option>
+              <option value="HKD">HKD 港币</option>
+              <option value="EUR">EUR 欧元</option>
+              <option value="JPY">JPY 日元</option>
+            </select>
+            <p class="text-xs text-gray-500 mt-1">统计按币种分组，不自动换算</p>
+            <div class="error-message text-red-500"></div>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label for="reminderValue" class="block text-sm font-medium text-gray-700 mb-1">提醒提前量</label>
@@ -1645,6 +1774,13 @@ const lunarBiz = {
         isValid = false;
       }
 
+      const amountField = document.getElementById('amount');
+      const amount = amountField ? Number(amountField.value) : 0;
+      if (amountField && (amountField.value === '' || isNaN(amount) || amount < 0)) {
+        showFieldError('amount', '金额不能为负数');
+        isValid = false;
+      }
+
       return isValid;
     }
 
@@ -1664,14 +1800,70 @@ const lunarBiz = {
     }
 
     const categorySeparator = /[\/,，\s]+/;
+    const supportedCurrencies = ['CNY', 'USD', 'HKD', 'EUR', 'JPY'];
     let subscriptionsCache = [];
     let searchDebounceTimer = null;
+    let statsPeriod = 'week';
+    let statsAnchorDate = new Date();
 
     function normalizeCategoryTokens(category = '') {
       return category
         .split(categorySeparator)
         .map(token => token.trim())
         .filter(token => token.length > 0);
+    }
+
+    function normalizeAmount(value) {
+      const amount = Number(value);
+      if (isNaN(amount) || amount < 0) {
+        return 0;
+      }
+      return Math.round(amount * 100) / 100;
+    }
+
+    function normalizeCurrency(currency) {
+      return supportedCurrencies.includes(currency) ? currency : 'CNY';
+    }
+
+    function getLocalDateKey(date) {
+      const parts = getTimezonePartsForStats(date, globalTimezone);
+      return makeLocalDateKey(parts.year, parts.month, parts.day);
+    }
+
+    function getPseudoDateKey(date) {
+      return makeLocalDateKey(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+    }
+
+    function makeLocalDateKey(year, month, day) {
+      return String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    }
+
+    function parseDateKey(dateKey) {
+      const parts = String(dateKey).split('-').map(Number);
+      return { year: parts[0], month: parts[1], day: parts[2] };
+    }
+
+    function normalizeSubscriptionCost(subscription) {
+      return {
+        amount: normalizeAmount(subscription && subscription.amount),
+        currency: normalizeCurrency(subscription && subscription.currency)
+      };
+    }
+
+    function formatMoney(amount, currency = 'CNY') {
+      const safeCurrency = normalizeCurrency(currency);
+      const safeAmount = normalizeAmount(amount);
+      if (safeCurrency === 'CNY') {
+        return '¥' + safeAmount.toFixed(2);
+      }
+      return safeCurrency + ' ' + safeAmount.toFixed(2);
+    }
+
+    function formatPeriodText(periodValue, periodUnit) {
+      const unitMap = { day: '天', month: '月', year: '年' };
+      const value = Number(periodValue) || 1;
+      const unit = unitMap[periodUnit] || periodUnit || '月';
+      return value + ' ' + unit;
     }
 
     function populateCategoryFilter(subscriptions) {
@@ -1810,6 +2002,273 @@ const lunarBiz = {
       });
     }
 
+    function getTimezonePartsForStats(date, timezone = 'UTC') {
+      try {
+        const dtf = new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone,
+          hour12: false,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        const parts = dtf.formatToParts(date);
+        const pick = type => Number(parts.find(part => part.type === type).value);
+        return {
+          year: pick('year'),
+          month: pick('month'),
+          day: pick('day'),
+          hour: pick('hour'),
+          minute: pick('minute'),
+          second: pick('second')
+        };
+      } catch (error) {
+        return {
+          year: date.getUTCFullYear(),
+          month: date.getUTCMonth() + 1,
+          day: date.getUTCDate(),
+          hour: date.getUTCHours(),
+          minute: date.getUTCMinutes(),
+          second: date.getUTCSeconds()
+        };
+      }
+    }
+
+    function makeStatsDate(year, month, day) {
+      return new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+    }
+
+    function addStatsPeriod(date, period, offset) {
+      const next = new Date(date);
+      if (period === 'week') {
+        next.setUTCDate(next.getUTCDate() + offset * 7);
+      } else if (period === 'month') {
+        next.setUTCMonth(next.getUTCMonth() + offset);
+      } else if (period === 'year') {
+        next.setUTCFullYear(next.getUTCFullYear() + offset);
+      }
+      return next;
+    }
+
+    function getStatsRange(period, anchorDate) {
+      const parts = getTimezonePartsForStats(anchorDate, globalTimezone);
+      let start;
+      let endExclusive;
+
+      if (period === 'week') {
+        const anchorMidnight = makeStatsDate(parts.year, parts.month, parts.day);
+        const weekday = anchorMidnight.getUTCDay();
+        const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+        start = new Date(anchorMidnight);
+        start.setUTCDate(anchorMidnight.getUTCDate() + mondayOffset);
+        endExclusive = new Date(start);
+        endExclusive.setUTCDate(start.getUTCDate() + 7);
+      } else if (period === 'month') {
+        start = makeStatsDate(parts.year, parts.month, 1);
+        endExclusive = makeStatsDate(parts.year, parts.month + 1, 1);
+      } else {
+        start = makeStatsDate(parts.year, 1, 1);
+        endExclusive = makeStatsDate(parts.year + 1, 1, 1);
+      }
+
+      const endInclusive = new Date(endExclusive);
+      endInclusive.setUTCDate(endExclusive.getUTCDate() - 1);
+      return {
+        start,
+        endExclusive,
+        startKey: makeLocalDateKey(start.getUTCFullYear(), start.getUTCMonth() + 1, start.getUTCDate()),
+        endKey: makeLocalDateKey(endInclusive.getUTCFullYear(), endInclusive.getUTCMonth() + 1, endInclusive.getUTCDate())
+      };
+    }
+
+    function formatStatsDateKey(dateKey) {
+      const parts = parseDateKey(dateKey);
+      if (!parts.year || !parts.month || !parts.day) {
+        return '';
+      }
+      return String(parts.year) + '/' + String(parts.month).padStart(2, '0') + '/' + String(parts.day).padStart(2, '0');
+    }
+
+    function formatStatsRangeLabel(period, range) {
+      const labelMap = { week: '周', month: '月', year: '年' };
+      const periodLabel = labelMap[period] || '当前周期';
+      return periodLabel + '：' + formatStatsDateKey(range.startKey) + ' 至 ' + formatStatsDateKey(range.endKey);
+    }
+
+    function addGregorianPeriod(date, periodValue, periodUnit) {
+      const next = new Date(date);
+      const value = Number(periodValue) || 1;
+      if (periodUnit === 'day') {
+        next.setUTCDate(next.getUTCDate() + value);
+      } else if (periodUnit === 'month') {
+        next.setUTCMonth(next.getUTCMonth() + value);
+      } else if (periodUnit === 'year') {
+        next.setUTCFullYear(next.getUTCFullYear() + value);
+      }
+      return next;
+    }
+
+    function addSubscriptionPeriodDate(date, subscription) {
+      const periodValue = Number(subscription.periodValue) || 1;
+      const periodUnit = subscription.periodUnit || 'month';
+      if (subscription.useLunar) {
+        const base = new Date(date);
+        const lunar = lunarCalendar.solar2lunar(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate());
+        if (lunar) {
+          const nextLunar = addLunarPeriod(lunar, periodValue, periodUnit);
+          const solar = lunar2solar(nextLunar);
+          if (solar) {
+            return makeStatsDate(solar.year, solar.month, solar.day);
+          }
+        }
+      }
+      return addGregorianPeriod(date, periodValue, periodUnit);
+    }
+
+    function addCurrencyTotal(totals, currency, amount) {
+      const safeCurrency = normalizeCurrency(currency);
+      totals[safeCurrency] = (totals[safeCurrency] || 0) + normalizeAmount(amount);
+    }
+
+    function renderCurrencyTotals(containerId, totals) {
+      const container = document.getElementById(containerId);
+      if (!container) {
+        return;
+      }
+      const currencies = Object.keys(totals).filter(currency => totals[currency] > 0).sort();
+      if (currencies.length === 0) {
+        container.innerHTML = '<div class="text-gray-500">暂无费用</div>';
+        return;
+      }
+      container.innerHTML = currencies.map(currency =>
+        '<div class="currency-line"><span>' + currency + '</span><strong>' + formatMoney(totals[currency], currency) + '</strong></div>'
+      ).join('');
+    }
+
+    function calculateNormalizedAmount(subscription, period) {
+      const cost = normalizeSubscriptionCost(subscription);
+      if (cost.amount <= 0) {
+        return 0;
+      }
+      const periodValue = Math.max(1, Number(subscription.periodValue) || 1);
+      const periodUnit = subscription.periodUnit || 'month';
+      let yearly = cost.amount;
+      if (periodUnit === 'day') {
+        yearly = cost.amount * 365 / periodValue;
+      } else if (periodUnit === 'month') {
+        yearly = cost.amount * 12 / periodValue;
+      } else if (periodUnit === 'year') {
+        yearly = cost.amount / periodValue;
+      }
+      if (period === 'week') {
+        return yearly / 52;
+      }
+      if (period === 'month') {
+        return yearly / 12;
+      }
+      return yearly;
+    }
+
+    function collectChargeOccurrences(subscription, range) {
+      const cost = normalizeSubscriptionCost(subscription);
+      if (cost.amount <= 0 || subscription.isActive === false || subscription.autoRenew === false) {
+        return [];
+      }
+
+      let chargeDate = new Date(subscription.expiryDate);
+      if (isNaN(chargeDate.getTime())) {
+        return [];
+      }
+      const initialKey = getLocalDateKey(chargeDate);
+      const initialParts = parseDateKey(initialKey);
+      chargeDate = makeStatsDate(initialParts.year, initialParts.month, initialParts.day);
+
+      const occurrences = [];
+      let guard = 0;
+      while (getPseudoDateKey(chargeDate) < range.startKey && guard < 1000) {
+        const nextDate = addSubscriptionPeriodDate(chargeDate, subscription);
+        if (!nextDate || nextDate <= chargeDate) {
+          break;
+        }
+        chargeDate = nextDate;
+        guard++;
+      }
+
+      while (getPseudoDateKey(chargeDate) <= range.endKey && guard < 2000) {
+        const dateKey = getPseudoDateKey(chargeDate);
+        if (dateKey >= range.startKey) {
+          occurrences.push({
+            subscription,
+            date: chargeDate,
+            dateKey: dateKey,
+            amount: cost.amount,
+            currency: cost.currency
+          });
+        }
+        const nextDate = addSubscriptionPeriodDate(chargeDate, subscription);
+        if (!nextDate || nextDate <= chargeDate) {
+          break;
+        }
+        chargeDate = nextDate;
+        guard++;
+      }
+
+      return occurrences;
+    }
+
+    function renderChargeDetails(details) {
+      const container = document.getElementById('chargeDetails');
+      if (!container) {
+        return;
+      }
+      if (!details.length) {
+        container.innerHTML = '<div class="px-4 py-3 text-gray-500">暂无扣费</div>';
+        return;
+      }
+      const sorted = [...details].sort((a, b) => a.date - b.date || a.subscription.name.localeCompare(b.subscription.name));
+      container.innerHTML = sorted.map(item =>
+        '<div class="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">' +
+          '<div>' +
+            '<div class="font-medium text-gray-900">' + item.subscription.name + '</div>' +
+            '<div class="text-xs text-gray-500">' + formatStatsDateKey(item.dateKey) + ' · 周期 ' + formatPeriodText(item.subscription.periodValue, item.subscription.periodUnit) + '</div>' +
+          '</div>' +
+          '<div class="font-semibold text-emerald-600">' + formatMoney(item.amount, item.currency) + '</div>' +
+        '</div>'
+      ).join('');
+    }
+
+    function renderCostStats() {
+      const range = getStatsRange(statsPeriod, statsAnchorDate);
+      const label = document.getElementById('statsRangeLabel');
+      if (label) {
+        label.textContent = formatStatsRangeLabel(statsPeriod, range);
+      }
+
+      const chargeTotals = {};
+      const normalizedTotals = {};
+      const chargeDetails = [];
+
+      subscriptionsCache.forEach(subscription => {
+        const cost = normalizeSubscriptionCost(subscription);
+        if (cost.amount <= 0 || subscription.isActive === false || subscription.autoRenew === false) {
+          return;
+        }
+
+        collectChargeOccurrences(subscription, range).forEach(item => {
+          addCurrencyTotal(chargeTotals, item.currency, item.amount);
+          chargeDetails.push(item);
+        });
+
+        addCurrencyTotal(normalizedTotals, cost.currency, calculateNormalizedAmount(subscription, statsPeriod));
+      });
+
+      renderCurrencyTotals('chargeTotals', chargeTotals);
+      renderCurrencyTotals('normalizedTotals', normalizedTotals);
+      renderChargeDetails(chargeDetails);
+    }
+
     function renderSubscriptionTable() {
       const tbody = document.getElementById('subscriptionsBody');
       if (!tbody) {
@@ -1902,9 +2361,13 @@ const lunarBiz = {
 
         let periodText = '';
         if (subscription.periodValue && subscription.periodUnit) {
-          const unitMap = { day: '天', month: '月', year: '年' };
-          periodText = subscription.periodValue + ' ' + (unitMap[subscription.periodUnit] || subscription.periodUnit);
+          periodText = formatPeriodText(subscription.periodValue, subscription.periodUnit);
         }
+
+        const cost = normalizeSubscriptionCost(subscription);
+        const amountHtml = cost.amount > 0
+          ? createHoverText(formatMoney(cost.amount, cost.currency) + ' / ' + periodText, 24, 'text-xs text-emerald-600 mt-1')
+          : '<div class="text-xs text-gray-400 mt-1">未设置金额</div>';
 
         const autoRenewIcon = subscription.autoRenew !== false
           ? '<i class="fas fa-sync-alt text-blue-500 ml-1" title="自动续订"></i>'
@@ -2000,6 +2463,7 @@ const lunarBiz = {
               typeHtml +
             '</div>' +
             (periodHtml ? '<div class="flex items-center gap-1">' + periodHtml + autoRenewIcon + '</div>' : '') +
+            amountHtml +
             categoryHtml +
             calendarTypeHtml +
           '</div></td>' +
@@ -2059,6 +2523,40 @@ const lunarBiz = {
       categorySelect.addEventListener('change', () => renderSubscriptionTable());
     }
 
+    document.querySelectorAll('.stats-tab').forEach(button => {
+      button.addEventListener('click', () => {
+        statsPeriod = button.dataset.period || 'week';
+        statsAnchorDate = new Date();
+        document.querySelectorAll('.stats-tab').forEach(tab => tab.classList.remove('active'));
+        button.classList.add('active');
+        renderCostStats();
+      });
+    });
+
+    const statsPrevBtn = document.getElementById('statsPrevBtn');
+    if (statsPrevBtn) {
+      statsPrevBtn.addEventListener('click', () => {
+        statsAnchorDate = addStatsPeriod(statsAnchorDate, statsPeriod, -1);
+        renderCostStats();
+      });
+    }
+
+    const statsNextBtn = document.getElementById('statsNextBtn');
+    if (statsNextBtn) {
+      statsNextBtn.addEventListener('click', () => {
+        statsAnchorDate = addStatsPeriod(statsAnchorDate, statsPeriod, 1);
+        renderCostStats();
+      });
+    }
+
+    const statsTodayBtn = document.getElementById('statsTodayBtn');
+    if (statsTodayBtn) {
+      statsTodayBtn.addEventListener('click', () => {
+        statsAnchorDate = new Date();
+        renderCostStats();
+      });
+    }
+
     // 获取所有订阅并按到期时间排序
     async function loadSubscriptions(showLoading = true) {
       try {
@@ -2080,8 +2578,12 @@ const lunarBiz = {
         const response = await fetch('/api/subscriptions');
         const data = await response.json();
 
-        subscriptionsCache = Array.isArray(data) ? data : [];
+        subscriptionsCache = Array.isArray(data) ? data.map(subscription => ({
+          ...subscription,
+          ...normalizeSubscriptionCost(subscription)
+        })) : [];
         populateCategoryFilter(subscriptionsCache);
+        renderCostStats();
         renderSubscriptionTable();
       } catch (error) {
         console.error('加载订阅失败:', error);
@@ -2162,6 +2664,8 @@ const lunarBiz = {
       const today = new Date().toISOString().split('T')[0]; // 前端使用本地时间
       document.getElementById('startDate').value = today;
       document.getElementById('category').value = '';
+      document.getElementById('amount').value = '0';
+      document.getElementById('currency').value = 'CNY';
       document.getElementById('reminderValue').value = '7';
       document.getElementById('reminderUnit').value = 'day';
       document.getElementById('isActive').checked = true;
@@ -2835,6 +3339,8 @@ const lunarBiz = {
         name: document.getElementById('name').value.trim(),
         customType: document.getElementById('customType').value.trim(),
         category: document.getElementById('category').value.trim(),
+        amount: normalizeAmount(document.getElementById('amount').value),
+        currency: normalizeCurrency(document.getElementById('currency').value),
         notes: document.getElementById('notes').value.trim() || '',
         isActive: document.getElementById('isActive').checked,
         autoRenew: document.getElementById('autoRenew').checked,
@@ -2896,6 +3402,8 @@ const lunarBiz = {
           document.getElementById('name').value = subscription.name;
           document.getElementById('customType').value = subscription.customType || '';
           document.getElementById('category').value = subscription.category || '';
+          document.getElementById('amount').value = normalizeAmount(subscription.amount).toFixed(2);
+          document.getElementById('currency').value = normalizeCurrency(subscription.currency);
           document.getElementById('notes').value = subscription.notes || '';
           document.getElementById('isActive').checked = subscription.isActive !== false;
           document.getElementById('autoRenew').checked = subscription.autoRenew !== false;
@@ -4679,12 +5187,16 @@ async function createSubscription(subscription, env) {
     }
 
     const reminderSetting = resolveReminderSetting(subscription);
+    const amount = normalizeSubscriptionAmount(subscription.amount);
+    const currency = normalizeSubscriptionCurrency(subscription.currency);
 
     const newSubscription = {
       id: Date.now().toString(), // 前端使用本地时间戳
       name: subscription.name,
       customType: subscription.customType || '',
       category: subscription.category ? subscription.category.trim() : '',
+      amount: amount,
+      currency: currency,
       startDate: subscription.startDate || null,
       expiryDate: subscription.expiryDate,
       periodValue: subscription.periodValue || 1,
@@ -4771,12 +5283,16 @@ if (useLunar) {
       reminderDays: subscription.reminderDays !== undefined ? subscription.reminderDays : subscriptions[index].reminderDays
     };
     const reminderSetting = resolveReminderSetting(reminderSource);
+    const amount = normalizeSubscriptionAmount(subscription.amount);
+    const currency = normalizeSubscriptionCurrency(subscription.currency);
 
     subscriptions[index] = {
       ...subscriptions[index],
       name: subscription.name,
       customType: subscription.customType || subscriptions[index].customType || '',
       category: subscription.category !== undefined ? subscription.category.trim() : (subscriptions[index].category || ''),
+      amount: amount,
+      currency: currency,
       startDate: subscription.startDate || subscriptions[index].startDate,
       expiryDate: subscription.expiryDate,
       periodValue: subscription.periodValue || subscriptions[index].periodValue || 1,
